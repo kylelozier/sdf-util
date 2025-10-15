@@ -1,16 +1,83 @@
 use image::{GrayImage, ImageBuffer, ImageReader, Luma};
-use std::path::{PathBuf, absolute};
+use rayon::prelude::*;
+use std::path::PathBuf;
+use std::{fs, io};
 
-fn main() {
-    make_straight();
+fn main() -> io::Result<()> {
+    let entries = fs::read_dir("C:/users/kloz1/Desktop/alphabet/")?;
+
+    let sdf_fields: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = entries
+        .par_bridge()
+        .filter_map(|entry| {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln! {"not entry {}", e}
+                    return None;
+                }
+            };
+            let path = entry.path();
+            println!("file type: {:?}", entry.file_type());
+
+            match entry.file_type() {
+                Ok(file_type) => {
+                    if file_type.is_file() {
+                        Some(make_straight(path))
+                    } else {
+                        None
+                    }
+                }
+                Err(e) => {
+                    eprint!("err getting file type {}", e);
+                    None
+                }
+            }
+        })
+        .collect();
+
+    // for entry in entries {
+    //     let entry = entry?;
+    //     let path = entry.path();
+    //     println!("file type: {:?}", entry.file_type());
+
+    //     if entry.file_type()?.is_file() {
+    //         sdf_fields.push(make_straight(path));
+    //     }
+    // }
+
+    let mut master_image: GrayImage = ImageBuffer::new(256, 256);
+    let master_dimension = 256;
+    let mut i = 0;
+    let mut j = 0;
+    let factor = 16;
+    for image in sdf_fields {
+        for x in 0..factor {
+            for y in 0..factor {
+                let pixel = image.get_pixel(x, y);
+                master_image.put_pixel(
+                    x + ((i * factor) % master_dimension),
+                    y + (j * factor),
+                    *pixel,
+                );
+            }
+        }
+        i += 1;
+        if (i * factor) % master_dimension == 0 {
+            j += 1;
+        }
+    }
+    master_image
+        .save("C:/Users/kloz1/Desktop/alphabet/prod/alphabet.png")
+        .unwrap();
+    Ok(())
 }
-pub fn make_straight() {
-    let root = "C:/users/kloz1/desktop/alphabet/";
-    let pathbuf = PathBuf::from(root).join("B.png");
+pub fn make_straight(file_in: PathBuf) -> ImageBuffer<Luma<u8>, Vec<u8>> {
+    // let root = "C:/users/kloz1/desktop/alphabet/";
+    // let pathbuf = PathBuf::from(root).join(file_in);
 
     // let image_bytes = fs::read(pathbuf).expect("Failed to read texture file.");
 
-    let dy_image = ImageReader::open(pathbuf)
+    let dy_image = ImageReader::open(file_in)
         .unwrap()
         .decode()
         .expect("failed to open image.");
@@ -19,9 +86,9 @@ pub fn make_straight() {
 
     let factor = 16;
 
-    let (width, height) = image.dimensions();
+    let (width, _height) = image.dimensions();
     let image_data = image.into_raw();
-    let image_size = image_data.len();
+    let _image_size = image_data.len();
     let mut grey_pixel_locations: Vec<(f64, f64)> = Vec::new();
     let mut white_pixel_locations: Vec<(f64, f64)> = Vec::new();
     let mut pos = 1;
@@ -137,8 +204,10 @@ pub fn make_straight() {
             i += 1;
         }
     }
-    let pathbuf = PathBuf::from(root).join("B+.png");
-    image.save(pathbuf).unwrap();
+    // let pathbuf = PathBuf::from(root).join("I+.png");
+    // image.save(pathbuf).unwrap();
+
+    image
 }
 
 pub fn make_wavy() {
