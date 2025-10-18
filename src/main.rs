@@ -6,7 +6,7 @@ use std::{fs, io};
 fn main() -> io::Result<()> {
     let entries = fs::read_dir("C:/users/kloz1/Desktop/alphabet/")?;
 
-    let sdf_fields: Vec<ImageBuffer<Luma<u8>, Vec<u8>>> = entries
+    let mut sdf_fields: Vec<(ImageBuffer<Luma<u8>, Vec<u8>>, u32, String)> = entries
         .par_bridge()
         .filter_map(|entry| {
             let entry = match entry {
@@ -17,12 +17,19 @@ fn main() -> io::Result<()> {
                 }
             };
             let path = entry.path();
-            println!("file type: {:?}", entry.file_type());
+            let file_name = entry.file_name().into_string().unwrap();
+
+            println!("loading {}", file_name);
+            let file_number_vec = file_name.clone().into_bytes();
+            let mut position: u32 = 0;
+            for number in file_number_vec {
+                position += number as u32;
+            }
 
             match entry.file_type() {
                 Ok(file_type) => {
                     if file_type.is_file() {
-                        Some(make_straight(path))
+                        Some((make_straight(path), position, file_name))
                     } else {
                         None
                     }
@@ -35,25 +42,32 @@ fn main() -> io::Result<()> {
         })
         .collect();
 
-    // for entry in entries {
-    //     let entry = entry?;
-    //     let path = entry.path();
-    //     println!("file type: {:?}", entry.file_type());
+    sdf_fields.sort_by(|a, b| a.1.cmp(&b.1));
 
-    //     if entry.file_type()?.is_file() {
-    //         sdf_fields.push(make_straight(path));
-    //     }
-    // }
+    let mut row = 0;
+    let mut column = 0;
+    let uv_offset = 1.0 / (512.0 / 32.0);
+    for name in &sdf_fields {
+        let name = name.2.clone();
+        println!("'{:?}' => {{", name);
+        println!("u += {};", column as f32 * uv_offset);
+        println!("v += {};}}", row as f32 * uv_offset);
+        column += 1;
+        if column % 16 == 0 {
+            row += 1;
+            column = 0;
+        }
+    }
 
-    let mut master_image: GrayImage = ImageBuffer::new(256, 256);
-    let master_dimension = 256;
+    let master_dimension = 512;
+    let mut master_image: GrayImage = ImageBuffer::new(master_dimension, master_dimension);
     let mut i = 0;
     let mut j = 0;
-    let factor = 16;
+    let factor = 32;
     for image in sdf_fields {
         for x in 0..factor {
             for y in 0..factor {
-                let pixel = image.get_pixel(x, y);
+                let pixel = image.0.get_pixel(x, y);
                 master_image.put_pixel(
                     x + ((i * factor) % master_dimension),
                     y + (j * factor),
@@ -66,8 +80,9 @@ fn main() -> io::Result<()> {
             j += 1;
         }
     }
+
     master_image
-        .save("C:/Users/kloz1/Desktop/alphabet/prod/alphabet.png")
+        .save("c:/Users/kloz1/rust-projects/rf3d/src/textures/alphabet.png")
         .unwrap();
     Ok(())
 }
@@ -84,7 +99,7 @@ pub fn make_straight(file_in: PathBuf) -> ImageBuffer<Luma<u8>, Vec<u8>> {
 
     let image = dy_image.into_luma8();
 
-    let factor = 16;
+    let factor = 32;
 
     let (width, _height) = image.dimensions();
     let image_data = image.into_raw();
@@ -188,12 +203,6 @@ pub fn make_straight(file_in: PathBuf) -> ImageBuffer<Luma<u8>, Vec<u8>> {
     // for byte in bytes {
     //     println!("byte {}", byte);
     // }
-
-    println!("most! {}, least! {} map! {}", most, least, mapp);
-    println!(
-        "df pos {},{} df value {}",
-        distance_field_pos[0][0].0, distance_field_pos[0][0].1, distance_field[0][0]
-    );
 
     let mut image: GrayImage = ImageBuffer::new(factor as u32, factor as u32);
 
